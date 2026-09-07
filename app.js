@@ -343,3 +343,90 @@ window.setPermission=function(role,action,value){data.permissions[role]=data.per
 function settingsPageEnhanced(){return `<div class="wrap"><div class="head"><div><h1>System Settings</h1><div class="page-note">These company details appear on PDF, Word and print reports.</div></div>${actionButtons("transactions")}</div><div class="panel"><div class="settings-grid"><label>Company name<input id="set-company" value="${esc(data.settings.companyName)}"></label><label>Address<input id="set-address" value="${esc(data.settings.address)}"></label><label>Phone<input id="set-phone" value="${esc(data.settings.phone)}"></label><label>Email<input id="set-email" value="${esc(data.settings.email)}"></label><label>PAN / VAT<input id="set-vat" value="${esc(data.settings.vat)}"></label></div><button class="btn" onclick="saveCompanySettings()">Save Company Details</button></div><div class="panel"><p class="muted">Use Users & Permissions to control Import, Export, Edit, Delete and Print for each role.</p></div></div>`}
 window.saveCompanySettings=function(){["companyName","address","phone","email","vat"].forEach(k=>data.settings[k]=document.getElementById("set-"+(k==="companyName"?"company":k))?.value||"");save();notify("Company details saved");render()};
 })();
+
+/* Operations, sales bill and quotation improvements */
+(function(){
+  const addFields=(type,fields)=>{
+    if(!schemas[type])return;
+    fields.forEach(f=>{if(!schemas[type].fields.some(x=>x[0]===f[0]))schemas[type].fields.push(f)});
+  };
+  addFields("sales",[["billNo","Bill No","text"],["insurance","Insurance Amount","number"],["legguard","Leg Guard Amount","number"],["product","Product","text"]]);
+  addFields("parts",[["shelf","Shelf Location","text"],["stockDate","Stock Date","date"]]);
+  addFields("bluebook",[["sendTo","Send To","text"],["status","Status (Pending/Done)","text"],["receivedAtOffice","Received at Office","text"],["handedOver","Handed Over","text"]]);
+  addFields("marketing",[["schedule","Marketing Schedule","datetime-local"],["owner","Responsible","text"],["status","Status","text"]]);
+  addFields("outstanding",[["followupStatus","Follow-up Status","text"]]);
+  schemas.quotation={title:"Quotation",fields:[["quoteNo","Quotation No","text"],["date","Date","date"],["customer","Customer Name","text"],["mobile","Mobile Number","tel"],["address","Address","text"],["item","Product / Model","text"],["qty","Qty","number"],["rate","Rate","number"],["discount","Discount","number"],["vat","VAT %","number"],["terms","Terms","text"],["status","Status","text"]]};
+  data.quotations=data.quotations||[];
+  modules.quotation=["🧾","Quotations"];
+
+  const oldSettingsPage=window.settingsPageEnhanced;
+  function note(text){const n=document.createElement("div");n.className="toast";n.textContent=text;document.body.appendChild(n);setTimeout(()=>n.remove(),2500)}
+  function esc2(v){return String(v??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+  function listOptions(type){
+    return (data[type]||[]).map(r=>`<option value="${esc2(r.name||r.code||r.item||"")}" data-mobile="${esc2(r.mobile||r.phone||"")}" data-address="${esc2(r.address||"")}" data-panvat="${esc2(r.panvat||"")}">${esc2(r.name||r.code||r.item||"")}</option>`).join("");
+  }
+  function datalistField(k,label,type,record,extraClass=""){
+    const value=record?.[k]??"";
+    return `<div class="${extraClass}"><input id="f_${k}" list="list_${type}" type="${k==="mobile"?"tel":"text"}" placeholder="${label}" aria-label="${label}" value="${esc2(value)}" oninput="partySearchV2('f_${k}','list_${type}','${type}')"><datalist id="list_${type}">${listOptions(type)}</datalist></div>`;
+  }
+  window.partySearchV2=function(inputId,listId,type){
+    const input=document.getElementById(inputId),box=document.getElementById(inputId+"_info"),o=[...(document.getElementById(listId)?.options||[])].find(x=>x.value.toLowerCase()===String(input?.value||"").toLowerCase());
+    if(!box)return;
+    if(!o){box.innerHTML="<span class='muted'>Type to search, or add a new party.</span>";return}
+    const name=o.value,mobile=o.dataset.mobile||"",history=[...(data.sales||[]),...(data.purchases||[]),...(data.payments||[])].filter(r=>[r.person,r.customer,r.supplier,r.party].includes(name)).length;
+    box.innerHTML=`<b>${esc2(name)}</b><span>Mobile: ${esc2(mobile||"—")} ${contactActionsV2(mobile)}</span><span>Address: ${esc2(o.dataset.address||"—")}</span><span>PAN/VAT: ${esc2(o.dataset.panvat||"—")}</span><span>${history} transaction(s)</span>`;
+    const mobileInput=document.getElementById(inputId==="f_person"?"f_mobil":"f_mobile");if(mobileInput&&mobile)mobileInput.value=mobile;
+  };
+  function contactActionsV2(phone){const p=String(phone||"").replace(/\D/g,"");return p?`<span class="contact-actions"><a class="contact call" href="tel:${p}">Call</a><a class="contact sms" href="sms:${p}">SMS</a><a class="contact wa" target="_blank" href="https://wa.me/${p}">WhatsApp</a></span>`:""}
+  function formV2(type,record){
+    const s=schemas[type],id=record?.id||"",party=type==="sales"?"person":type==="purchases"?"supplier":null;
+    return `<div class="formgrid" id="form" data-edit-id="${id}">${s.fields.map(([k,l,t])=>{
+      if(party===k){const pt=type==="sales"?"customers":"suppliers";return `<div class="field-wide">${datalistField(k,l,pt,record)}<div id="f_${k}_info" class="party-info"><span class="muted">Type a name to search saved ${pt}.</span></div></div>`}
+      if(k==="model"||k==="product"||k==="item"){const values=[...(data.items||[]),...(data.parts||[])].filter((r,i,a)=>i===a.findIndex(x=>String(x.name||x.partno||"").toLowerCase()===String(r.name||r.partno||"").toLowerCase()));return `<div><input id="f_${k}" list="list_products" type="${t}" placeholder="${l} (type to search)" value="${esc2(record?.[k]??"")}"><datalist id="list_products">${values.map(r=>`<option value="${esc2(r.name||r.partno||"")}">${esc2(r.code||r.partno||"")}</option>`).join("")}</datalist></div>`}
+      if(["payment","method","sendTo","status","followupStatus","receivedAtOffice","handedOver"].includes(k)){const opts=k==="sendTo"?["Customer","Office","Salesperson","Courier"]:k==="status"||k==="followupStatus"?["Pending","Done"]:k==="receivedAtOffice"||k==="handedOver"?["Pending","Done"]:["Cash","Bank","QR","Credit"];return `<select id="f_${k}" title="${l}"><option value="">${l}</option>${opts.map(v=>`<option ${String(record?.[k]||"")===v?"selected":""}>${v}</option>`).join("")}</select>`}
+      return `<input id="f_${k}" type="${t}" placeholder="${l}" aria-label="${l}" value="${esc2(record?.[k]??"")}">`;
+    }).join("")}</div><div class="form-actions"><button class="btn" onclick="submitForm('${type}')">${id?"Update Record":"Save Record"}</button>${id?`<button class="btn secondary" onclick="render()">Cancel</button>`:""}<button class="btn outline" onclick="printCurrentEntry('${type}')">Print Entry</button></div>`;
+  }
+  function operationalTable(type){
+    const s=schemas[type],rows=data[type]||[];let html=`<div class="tablewrap"><table><thead><tr>${s.fields.map(x=>`<th>${x[1]}</th>`).join("")}<th>Contact</th><th>Age / Status</th><th>Actions</th></tr></thead><tbody>`;
+    rows.forEach(r=>{
+      const phone=r.mobile||r.mobil||r.phone||"";let age="";
+      if(type==="parts"){const d=r.stockDate?Math.floor((Date.now()-new Date(r.stockDate))/86400000):0;age=`Stock age: ${d>0?d:0} days`}
+      else if(type==="outstanding"){const d=r.due?Math.ceil((new Date()-new Date(r.due))/86400000):0;age=`Due age: ${d>0?d:0} days`}
+      else if(type==="bluebook")age=r.status||"Pending";
+      else age=r.status||r.stage||r.followupStatus||"";
+      html+=`<tr>${s.fields.map(([k])=>`<td>${esc2(r[k]??"")}</td>`).join("")}<td>${contactActionsV2(phone)}</td><td>${esc2(age)}</td><td>${canV2("edit")?`<button class="btn mini" onclick="editRecord('${type}',${r.id})">Edit</button>`:""} ${type==="sales"?`<button class="btn mini outline" onclick="printSalesBill(${r.id})">Bill</button>`:""} ${canV2("delete")?`<button class="btn mini danger" onclick="del('${type}',${r.id})">Delete</button>`:""}</td></tr>`;
+    });
+    return html+"</tbody></table></div>";
+  }
+  function canV2(a){return current?.role==="Admin"||data.permissions?.[current?.role]?.[a]!==false}
+  function actionV2(type){return `<div class="export-actions">${canV2("export")?`<button class="btn mini" onclick="exportModule('${type}')">Export Excel</button><button class="btn mini" onclick="exportDocument('${type}','pdf')">Export PDF</button><button class="btn mini" onclick="exportDocument('${type}','word')">Export Word</button>`:""}${canV2("print")?`<button class="btn mini outline" onclick="exportDocument('${type}','print')">Print</button>`:""}</div>`}
+  function followupDashboard(){
+    const pending=[...(data.leads||[])].filter(r=>r.next&&days(r.next)<=1),crm=(data.crm||[]).filter(r=>r.next&&days(r.next)<=1),out=(data.outstanding||[]).filter(r=>(+r.total||0)-(+r.paid||0)>0);
+    return `<div class="panel"><div class="kpi-head"><h3>Follow-up Pending</h3><span class="badge">${pending.length+crm.length+out.length}</span></div>${[...pending.map(r=>`Lead · ${r.customer||""} · ${r.phone||""}`),...crm.map(r=>`CRM · ${r.customer||""} · ${r.mobile||""}`),...out.map(r=>`Outstanding · ${r.customer||""} · ${money((+r.total||0)-(+r.paid||0))}`)].slice(0,8).map(x=>`<div class="alert yellow">${esc2(x)}</div>`).join("")||"<div class='alert green'>No follow-ups due today.</div>"}</div>`;
+  }
+  function dashboardV2(){
+    const base=dashboard(),sales=data.sales||[],purchase=data.purchases||[],stock=(data.items||[]).reduce((a,r)=>a+(+r.stock||+r.opening||0),0),pending=[...(data.leads||[]),...(data.crm||[])].filter(r=>r.next&&days(r.next)<=1).length;
+    const bottlenecks=[["Pending follow-ups",pending],["Low stock",(data.items||[]).filter(r=>(+r.stock||+r.opening||0)<=(+r.reorder||0)).length],["Outstanding aging",(data.outstanding||[]).filter(r=>r.due&&days(r.due)<0).length],["Unfinished handovers",(data.bluebook||[]).filter(r=>String(r.handedOver).toLowerCase()!=="done").length]];
+    return base.replace("</div></div>`","</div></div>`")+`<div class="grid"><div>${followupDashboard()}</div><div class="panel"><div class="kpi-head"><h3>Matrix KPI & Bottlenecks</h3><span class="muted">Live operational figures</span></div><div class="matrix-kpi">${bottlenecks.map(x=>`<div><b>${x[1]}</b><span>${x[0]}</span></div>`).join("")}</div><p class="muted">Stock on hand: ${stock} · Sales records: ${sales.length} · Purchases: ${purchase.length}</p></div></div>`;
+  }
+  function quoteHtml(q){
+    const s=data.settings||{},logo=s.logo?`<img src="${s.logo}" class="quote-logo">`:"";
+    const sub=(+q.qty||0)*(+q.rate||0)-(+q.discount||0),vat=sub*(+q.vat||0)/100;
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Quotation ${esc2(q.quoteNo)}</title><style>body{font-family:Arial;margin:38px;color:#172033}header{border-bottom:3px solid #1976d2;padding-bottom:15px;display:flex;gap:16px;align-items:center}.quote-logo{max-width:90px;max-height:70px}h1{margin:0;color:#102a43}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{border:1px solid #dce5ef;padding:10px;text-align:left}th{background:#eaf2fb}.total{margin:20px 0 0 auto;width:280px}.total div{display:flex;justify-content:space-between;border-bottom:1px solid #e2e8f0;padding:6px}.sig{display:flex;justify-content:space-between;margin-top:90px}.sig span{border-top:1px solid #172033;padding-top:8px;width:180px;text-align:center}</style></head><body><header>${logo}<div><h1>${esc2(s.companyName||"EKIMA ENTERPRISES")}</h1><div>${esc2(s.address||"")} · ${esc2(s.phone||"")} ${s.vat?"· VAT: "+esc2(s.vat):""}</div><h2>QUOTATION</h2><div>Date: ${esc2(q.date||today())} · No: ${esc2(q.quoteNo||"")}</div></div></header><p><b>Customer:</b> ${esc2(q.customer)} · ${esc2(q.mobile)}<br>${esc2(q.address)}</p><table><tr><th>Product / Model</th><th>Qty</th><th>Rate</th><th>Discount</th><th>VAT %</th><th>Total</th></tr><tr><td>${esc2(q.item)}</td><td>${esc2(q.qty)}</td><td>${money(q.rate)}</td><td>${money(q.discount)}</td><td>${esc2(q.vat)}</td><td>${money(sub+vat)}</td></tr></table><div class="total"><div><b>Subtotal</b><b>${money(sub)}</b></div><div><span>VAT</span><span>${money(vat)}</span></div><div><b>Grand Total</b><b>${money(sub+vat)}</b></div></div><p><b>Terms:</b> ${esc2(q.terms||"Valid as stated above.")}</p><div class="sig"><span>Prepared By</span><span>Customer Acceptance</span></div></body></html>`;
+  }
+  const oldExportDocument=window.exportDocument;
+  window.exportDocument=function(type,kind){if(type!=="quotation")return oldExportDocument(type,kind);if(!canV2(kind==="print"?"print":"export"))return alert("Permission denied.");const q=data.quotations[0]||{quoteNo:"",date:today(),customer:""};const html=quoteHtml(q);if(kind==="word"){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([html],{type:"application/msword"}));a.download="ekima-quotation.doc";a.click()}else if(kind==="print"){const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();w.print()}}else{const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();w.print()}}};
+  window.printSalesBill=function(id){if(!canV2("print"))return alert("Permission denied.");const sale=(data.sales||[]).find(r=>r.id===id);if(!sale)return;const q={quoteNo:sale.billNo||"SALES-BILL",date:sale.date,customer:sale.person,mobile:sale.mobil,address:sale.place,item:sale.model||sale.product,qty:1,rate:(+sale.amount||0),discount:(+sale.discount||0),vat:0,terms:"Thank you for your business."};const w=window.open("","_blank");if(w){w.document.write(quoteHtml(q).replace("QUOTATION","SALES BILL"));w.document.close();w.print()}};
+  window.saveBranding=function(){if(!canV2("edit"))return alert("Permission denied.");const map={companyName:"brand-company",address:"brand-address",phone:"brand-phone",vat:"brand-vat"};Object.keys(map).forEach(k=>data.settings[k]=document.getElementById(map[k])?.value||"");save();note("Letterhead details saved");render()};
+  window.handleLogoV2=function(input){if(!canV2("edit")){input.value="";return alert("Permission denied.");}const file=input.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{data.settings.logo=reader.result;save();note("Logo saved to local branding");render()};reader.readAsDataURL(file)};
+  function brandingPage(){return `<div class="wrap"><div class="head"><div><h1>Quotation & Letterhead Branding</h1><div class="page-note">Change the company details and logo used on quotations, bills and reports.</div></div>${actionV2("quotation")}</div><div class="panel"><div class="settings-grid"><label>Company name<input id="brand-company" value="${esc2(data.settings.companyName||"")}"></label><label>Address<input id="brand-address" value="${esc2(data.settings.address||"")}"></label><label>Phone<input id="brand-phone" value="${esc2(data.settings.phone||"")}"></label><label>PAN / VAT<input id="brand-vat" value="${esc2(data.settings.vat||"")}"></label><label>Upload logo<input type="file" accept="image/*" onchange="handleLogoV2(this)"></label></div>${data.settings.logo?`<img class="branding-preview" src="${data.settings.logo}" alt="Current logo">`:""}<br><button class="btn" onclick="saveBranding()">Save Letterhead</button></div></div>`}
+  window.render=function(){
+    const c=document.getElementById("content");if(page==="imports"){c.innerHTML=importPage();document.getElementById("title").textContent="Import Center";return}
+    if(page==="dashboard"){document.getElementById("title").textContent="Management Dashboard";c.innerHTML=dashboardV2();draw();return}
+    if(page==="users"){document.getElementById("title").textContent="Users / Staff";c.innerHTML=usersPageEnhanced();return}
+    if(page==="settings"){document.getElementById("title").textContent="System Settings";c.innerHTML=brandingPage();return}
+    if(page==="accounting"||page==="reminders"||page==="ai"){document.getElementById("title").textContent=modules[page]?.[1]||page;c.innerHTML=(page==="accounting"?accountingPage():page==="reminders"?remindersPage():aiPage());return}
+    const s=schemas[page];if(!s)return;c.innerHTML=`<div class="wrap"><div class="head"><div><h1>${s.title}</h1><div class="page-note">Type to search customers, models and products. Use the table bill action for print-ready sales bills.</div></div>${actionV2(page)}</div><div class="panel">${canV2("edit")?formV2(page):"<p class='muted'>View and export access only.</p>"}</div><div class="panel"><div class="toolbar"><input class="search" placeholder="Search Name, Mobile, Code, PAN/VAT…" oninput="filterTable(this.value)"><span class="muted">${(data[page]||[]).length} record(s)</span></div><div id="tbl">${operationalTable(page)}</div></div></div>`;if(page==="sales")partySearchV2("f_person","list_customers","customers");if(page==="purchases")partySearchV2("f_supplier","list_suppliers","suppliers");
+  };
+})();
