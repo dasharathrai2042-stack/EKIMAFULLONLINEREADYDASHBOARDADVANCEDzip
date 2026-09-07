@@ -1,0 +1,419 @@
+Upgrade the existing ERP system and add the following modules and features without removing or breaking any existing functionality.
+
+### 1. AUTO BILL / VOUCHER NUMBER
+
+* Automatically generate unique Bill No., Invoice No., Purchase No., Sales No., Receipt No. and Payment No.
+* Number should increase automatically in sequence.
+* Allow admin to configure prefixes such as:
+
+  * INV-000001
+  * PUR-000001
+  * PAY-000001
+  * REC-000001
+* Prevent duplicate bill/voucher numbers.
+* Allow manual editing only for authorized admin users.
+
+### 2. ITEMS MASTER
+
+Add a complete Item Master with editable columns:
+
+* Item Code / SKU
+* Item Name
+* Brand
+* Category
+* Sub Category
+* Model
+* Unit
+* Purchase Rate
+* Sales Rate
+* MRP
+* VAT %
+* Discount %
+* Opening Stock
+* Minimum Stock
+* Current Stock
+* Warehouse / Store Location
+* Supplier
+* Status
+* Remarks
+
+Brand must be a separate column and searchable dropdown.
+
+### 3. ROW AND COLUMN ENTRY SYSTEM
+
+All transaction entry screens must use a professional spreadsheet-style ROW and COLUMN format.
+
+Example:
+
+| S.N. | Item Code | Item Name | Brand | Qty | Rate | Discount | VAT | Amount |
+| ---- | --------- | --------- | ----- | --- | ---- | -------- | --- | ------ |
+
+Requirements:
+
+* Add Row
+* Delete Row
+* Duplicate Row
+* Edit Row
+* Search Item
+* Keyboard navigation
+* Automatic calculation
+* Auto subtotal
+* Discount calculation
+* VAT calculation
+* Net Total
+* Round-off
+* Grand Total
+* Automatic stock update after posting
+* All columns must be editable according to user permission.
+
+### 4. BUSINESS HEALTH CHECK-UP
+
+Create a Business Health Check-Up dashboard.
+
+Show:
+
+* Sales Health
+* Purchase Health
+* Profitability
+* Gross Profit
+* Net Profit
+* Cash Position
+* Receivable
+* Payable
+* Inventory Value
+* Slow Moving Stock
+* Dead Stock
+* Fast Moving Items
+* Outstanding Customers
+* Outstanding Suppliers
+* Monthly Sales Growth
+* Expense Ratio
+* Cash Conversion Status
+* Working Capital Status
+
+Use status indicators:
+
+* Healthy
+* Warning
+* Critical
+
+Add automatic recommendations based on business data.
+
+### 5. CASH FLOW STATUS
+
+Create a Cash Flow Management dashboard.
+
+Show:
+
+* Opening Cash
+* Cash In
+* Cash Out
+* Bank In
+* Bank Out
+* Customer Collection
+* Supplier Payment
+* Operating Expenses
+* Loan/Finance Payment
+* Closing Cash
+* Daily Cash Flow
+* Weekly Cash Flow
+* Monthly Cash Flow
+* Cash Flow Forecast
+
+Show:
+CASH FLOW = OPENING BALANCE + TOTAL INFLOW - TOTAL OUTFLOW
+
+Provide daily, weekly, monthly and yearly reports.
+
+### 6. EDITABLE REPORT FORMAT
+
+All reports and forms must be fully configurable.
+
+Admin should be able to:
+
+* Add fields
+* Remove fields
+* Rename fields
+* Change column order
+* Resize columns
+* Hide/show columns
+* Change labels
+* Change print layout
+* Add company logo
+* Add header/footer
+* Add signature section
+* Configure invoice format
+* Configure voucher format
+
+Save multiple templates such as:
+
+* Standard Invoice
+* Tax Invoice
+* Purchase Invoice
+* Sales Invoice
+* Receipt
+* Payment Voucher
+* Journal Voucher
+* Quotation
+
+### 7. STAFF ATTENDANCE MANAGEMENT
+
+Create Staff Attendance module.
+
+Features:
+
+* Employee Master
+* Employee ID
+* Name
+* Department
+* Designation
+* Mobile Number
+* Joining Date
+* Attendance Date
+* Check In
+* Check Out
+* Late
+* Early Leave
+* Present
+* Absent
+* Leave
+* Half Day
+* Holiday
+* Overtime
+
+Dashboard:
+
+* Today's Attendance
+* Present Staff
+* Absent Staff
+* Late Staff
+* On Leave
+* Monthly Attendance Summary
+
+Allow attendance editing only according to permission.
+
+### 8. QR ENTRY SYSTEM
+
+Add QR Code based entry system.
+
+QR should be generated for:
+
+* Items
+* Customers
+* Suppliers
+* Employees
+* Assets
+* Documents
+* Bills/Vouchers
+
+QR scanning should automatically retrieve the related record.
+
+For inventory:
+Scan Item QR → automatically add item to transaction row.
+
+For attendance:
+Scan Employee QR → automatically record Check-In / Check-Out.
+
+For documents:
+Scan QR → open the related invoice, voucher or record.
+
+### 9. DAY BOOK MANAGEMENT
+
+Create a complete Day Book module.
+
+Show all daily transactions in chronological order:
+
+* Sales
+* Purchase
+* Receipt
+* Payment
+* Cash Transfer
+* Bank Transfer
+* Expense
+* Income
+* Journal
+* Contra
+* Credit/Debit Adjustment
+
+Columns:
+Date | Voucher No. | Voucher Type | Account | Particulars | Debit | Credit | Balance | User
+
+Features:
+
+* Date filter
+* Account filter
+* Voucher type filter
+* User filter
+* Search
+* Edit
+* View
+* Print
+* Export Excel
+* Export PDF
+* Export Word
+
+### 10. FINANCE MANAGEMENT
+
+Create a complete Finance Management module.
+
+Include:
+
+* Cash Management
+* Bank Management
+* Customer Receivable
+* Supplier Payable
+* Loan Management
+* EMI Management
+* Interest Management
+* Finance Company Management
+* Bank Reconciliation
+* Cheque Management
+* Deposit
+* Withdrawal
+* Fund Transfer
+* Expense Management
+* Income Management
+* Budget Management
+
+Dashboard should show:
+
+* Total Cash
+* Total Bank
+* Receivable
+* Payable
+* Loan Outstanding
+* Today's Collection
+* Today's Payment
+* Monthly Income
+* Monthly Expense
+* Net Cash Position
+
+### 11. ACCOUNTING INTEGRATION
+
+Every transaction must automatically integrate with accounting.
+
+For example:
+Sales → Stock decrease + Customer receivable/cash increase + Sales account + VAT
+
+Purchase → Stock increase + Supplier payable/cash decrease + Purchase account + VAT
+
+Receipt → Cash/Bank increase + Customer receivable decrease
+
+Payment → Cash/Bank decrease + Supplier payable decrease
+
+Expense → Expense account + Cash/Bank decrease
+
+All entries must flow automatically into:
+
+* Day Book
+* Ledger
+* Trial Balance
+* Profit & Loss
+* Balance Sheet
+* Cash Flow
+* VAT Report
+* Receivable
+* Payable
+* Stock Report
+
+### 12. SEARCH AND FILTER
+
+Every module must have:
+
+* Global Search
+* Advanced Search
+* Date Range
+* Customer filter
+* Supplier filter
+* Brand filter
+* Item filter
+* Employee filter
+* Voucher filter
+* Status filter
+
+### 13. IMPORT / EXPORT
+
+Allow:
+
+* Excel Import
+* Excel Export
+* PDF Export
+* Word Export
+* Print
+* CSV Export
+
+Excel import should support column mapping and duplicate checking.
+
+### 14. USER PERMISSION
+
+Create role-based permissions:
+
+* Super Admin
+* Admin
+* Accountant
+* Sales
+* Purchase
+* Store
+* HR
+* Manager
+* Viewer
+
+Control:
+
+* View
+* Add
+* Edit
+* Delete
+* Approve
+* Print
+* Export
+* Import
+* Financial data access
+
+### 15. AUDIT TRAIL
+
+Record:
+
+* User
+* Date
+* Time
+* IP/device if available
+* Action
+* Old Value
+* New Value
+
+Track all additions, edits, deletions and approvals.
+
+### 16. DASHBOARD
+
+Create a professional responsive dashboard showing:
+
+Sales Today
+Purchase Today
+Today's Collection
+Today's Payment
+Cash Balance
+Bank Balance
+Receivable
+Payable
+Stock Value
+Low Stock
+Gross Profit
+Net Profit
+Business Health
+Cash Flow Status
+Staff Attendance
+
+All dashboard figures must be calculated from live transaction data.
+
+### IMPORTANT
+
+Do not create static/demo numbers.
+
+All modules must use the same centralized database and remain interconnected.
+
+Every entry must be editable according to permission, while posted financial transactions should maintain proper audit history.
+
+The system must work on Desktop, Tablet and Mobile.
+
+Keep the existing system design and functionality, but upgrade it to a professional, scalable ERP system with clean navigation, fast search, spreadsheet-style data entry, automatic calculations and real-time dashboards.

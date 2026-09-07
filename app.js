@@ -344,6 +344,104 @@ function settingsPageEnhanced(){return `<div class="wrap"><div class="head"><div
 window.saveCompanySettings=function(){["companyName","address","phone","email","vat"].forEach(k=>data.settings[k]=document.getElementById("set-"+(k==="companyName"?"company":k))?.value||"");save();notify("Company details saved");render()};
 })();
 
+/* ERP specification pass: numbering, health, finance, attendance and audit */
+(function(){
+  const add=(type,fields)=>{if(!schemas[type])schemas[type]={title:type,fields:[]};fields.forEach(f=>{if(!schemas[type].fields.some(x=>x[0]===f[0]))schemas[type].fields.push(f)})};
+  ["auditTrail","attendance","daybook","finance","assets"].forEach(k=>{if(!data[k])data[k]=[]});
+  data.reportTemplates=data.reportTemplates||{standard:{name:"Standard Invoice",footer:"Thank you for your business.",signature:"Prepared By / Approved By"}};
+  data.settings.numbering=Object.assign({invoicePrefix:"INV",purchasePrefix:"PUR",paymentPrefix:"PAY",receiptPrefix:"REC",returnPrefix:"RET",quotationPrefix:"QUO"},data.settings.numbering||{});
+  data.settings.openingCash=Number(data.settings.openingCash||0);
+  add("items",[["brand","Brand","text"],["category","Category","text"],["subcategory","Sub Category","text"],["model","Model","text"],["purchaseRate","Purchase Rate","number"],["salesRate","Sales Rate","number"],["mrp","MRP","number"],["discount","Discount %","number"],["minStock","Minimum Stock","number"],["location","Warehouse / Store Location","text"],["supplier","Supplier","text"],["status","Status","text"],["remarks","Remarks","text"]]);
+  add("attendance",[["employeeId","Employee ID","text"],["name","Employee Name","text"],["department","Department","text"],["designation","Designation","text"],["mobile","Mobile Number","tel"],["joining","Joining Date","date"],["attendanceDate","Attendance Date","date"],["checkIn","Check In","time"],["checkOut","Check Out","time"],["late","Late","text"],["earlyLeave","Early Leave","text"],["status","Status (Present/Absent/Leave/Half Day/Holiday)","text"],["overtime","Overtime Hours","number"]]);
+  add("daybook",[["date","Date","date"],["voucherNo","Voucher No","text"],["voucherType","Voucher Type","text"],["account","Account","text"],["particulars","Particulars","text"],["debit","Debit","number"],["credit","Credit","number"],["balance","Balance","number"],["user","User","text"]]);
+  add("finance",[["date","Date","date"],["type","Finance Type","text"],["party","Customer / Supplier / Finance Company","text"],["ref","Reference / Cheque No","text"],["inflow","Inflow","number"],["outflow","Outflow","number"],["method","Cash / Bank","text"],["status","Status","text"],["note","Note","text"]]);
+  modules.health=["❤️","Business Health"];modules.cashflow=["💧","Cash Flow"];modules.attendance=["🕘","Attendance"];modules.daybook=["📖","Day Book"];modules.finance=["🏦","Finance Management"];modules.auditTrail=["🧾","Audit Trail"];
+  function note3(t){const n=document.createElement("div");n.className="toast";n.textContent=t;document.body.appendChild(n);setTimeout(()=>n.remove(),2600)}
+  function isAdmin3(){return current?.role==="Admin"||current?.role==="Super Admin"}
+  function can3(a){return isAdmin3()||data.permissions?.[current?.role]?.[a]!==false}
+  function nextNo(type){
+    const map={sales:["billNo","invoicePrefix","sales"],purchases:["bill","purchasePrefix","purchases"],payments:["ref","paymentPrefix","payments"],returns:["ref","returnPrefix","returns"],quotation:["quoteNo","quotationPrefix","quotations"],po:["pono","purchasePrefix","po"]}[type];
+    if(!map)return "";
+    const [field,prefixKey,collection]=map,prefix=data.settings.numbering[prefixKey]||prefixKey.slice(0,3).toUpperCase(),rows=[...(data[collection]||[])];
+    const max=rows.reduce((m,r)=>{const n=parseInt(String(r[field]||"").replace(/\D/g,""),10);return Number.isFinite(n)?Math.max(m,n):m},0);
+    return `${prefix}-${String(max+1).padStart(6,"0")}`;
+  }
+  function audit3(action,type,oldValue,newValue){
+    data.auditTrail.push({id:Date.now()+Math.floor(Math.random()*999),user:current?.name||"System",date:today(),time:new Date().toLocaleTimeString(),device:navigator.userAgent.slice(0,80),action,type,oldValue:oldValue?JSON.stringify(oldValue):"",newValue:newValue?JSON.stringify(newValue):""});
+  }
+  function accounting3(type,o){
+    if(!o||!o.id)return;
+    const ref=type==="sales"?`SALE-${o.id}`:type==="purchases"?`PUR-${o.id}`:type==="payments"?String(o.ref||`PAY-${o.id}`):"";
+    if(!ref||data.transactions.some(r=>r.ref===ref))return;
+    const amount=type==="sales"?Math.max(0,(+o.amount||0)-(+o.discount||0)):type==="purchases"?Math.max(0,(+o.qty||0)*(+o.rate||0)-(+o.discount||0)):(+o.amount||0);
+    data.transactions.push({id:Date.now()+Math.floor(Math.random()*1000),date:o.date||today(),type:type==="sales"?"Sales":type==="purchases"?"Purchase":"Payment",ref,party:o.person||o.supplier||o.party||"",debit:type==="sales"?amount:0,credit:type==="sales"?0:amount,discount:+o.discount||0,payment:o.payment||o.method||"Cash",note:"Automatic accounting integration"});
+    data.journals=data.journals||[];data.journals.push({id:Date.now()+2,date:o.date||today(),ref,account:type==="sales"?"Sales / Receivable":type==="purchases"?"Inventory / Payable":"Cash / Bank",debit:type==="sales"?amount:0,credit:type==="sales"?0:amount,narration:"Automatic posting"});
+  }
+  function syncGrid(){
+    if(!window.entryRows||!window.entryRows.length)return;
+    const total=entryRows.reduce((a,r)=>a+(+r.qty||0)*(+r.rate||0),0),discount=entryRows.reduce((a,r)=>a+(+r.discount||0),0);
+    const first=entryRows[0];
+    if(page==="sales"){if(document.getElementById("f_model"))document.getElementById("f_model").value=first.item; if(document.getElementById("f_amount"))document.getElementById("f_amount").value=total; if(document.getElementById("f_discount"))document.getElementById("f_discount").value=discount}
+    if(page==="purchases"){if(document.getElementById("f_item"))document.getElementById("f_item").value=first.item; if(document.getElementById("f_qty"))document.getElementById("f_qty").value=entryRows.reduce((a,r)=>a+(+r.qty||0),0); if(document.getElementById("f_rate"))document.getElementById("f_rate").value=entryRows.length?total/entryRows.reduce((a,r)=>a+(+r.qty||0),0):0; if(document.getElementById("f_discount"))document.getElementById("f_discount").value=discount}
+  }
+  window.entryRows=window.entryRows||[{item:"",qty:1,rate:0,discount:0,vat:0}];
+  window.updateEntryRow=function(i,k,v){entryRows[i][k]=v;renderEntryGrid();};
+  window.addEntryRow=function(){entryRows.push({item:"",qty:1,rate:0,discount:0,vat:0});renderEntryGrid()};
+  window.deleteEntryRow=function(i){if(entryRows.length>1){entryRows.splice(i,1);renderEntryGrid()}};
+  window.duplicateEntryRow=function(i){entryRows.splice(i+1,0,Object.assign({},entryRows[i]));renderEntryGrid()};
+  window.renderEntryGrid=function(){const box=document.getElementById("entry-grid");if(!box)return;const subtotal=entryRows.reduce((a,r)=>a+(+r.qty||0)*(+r.rate||0),0),discount=entryRows.reduce((a,r)=>a+(+r.discount||0),0),vat=entryRows.reduce((a,r)=>a+((+r.qty||0)*(+r.rate||0)-(+r.discount||0))*(+r.vat||0)/100,0);box.innerHTML=`<div class="entry-grid-head"><b>Spreadsheet Entry Rows</b><span class="muted">Subtotal ${money(subtotal)} · VAT ${money(vat)} · Net ${money(subtotal-discount+vat)}</span></div><div class="tablewrap"><table class="line-grid"><thead><tr><th>S.N.</th><th>Item / Model</th><th>Qty</th><th>Rate</th><th>Discount</th><th>VAT %</th><th>Amount</th><th>Actions</th></tr></thead><tbody>${entryRows.map((r,i)=>`<tr><td>${i+1}</td><td><input value="${String(r.item||"").replace(/"/g,"&quot;")}" oninput="updateEntryRow(${i},'item',this.value)"></td><td><input type="number" value="${r.qty||0}" oninput="updateEntryRow(${i},'qty',this.value)"></td><td><input type="number" value="${r.rate||0}" oninput="updateEntryRow(${i},'rate',this.value)"></td><td><input type="number" value="${r.discount||0}" oninput="updateEntryRow(${i},'discount',this.value)"></td><td><input type="number" value="${r.vat||0}" oninput="updateEntryRow(${i},'vat',this.value)"></td><td>${money((+r.qty||0)*(+r.rate||0)-(+r.discount||0))}</td><td><button class="btn mini" onclick="duplicateEntryRow(${i})">Duplicate</button> <button class="btn mini danger" onclick="deleteEntryRow(${i})">Delete</button></td></tr>`).join("")}</tbody></table></div><button class="btn mini outline" onclick="addEntryRow()">Add Row</button></div>`};
+  window.exportCsv3=function(type){if(!can3("export"))return alert("Permission denied.");const rows=data[type]||[],fields=schemas[type]?.fields||[];const csv=[fields.map(x=>`"${x[1].replace(/"/g,'""')}"`).join(","),...rows.map(r=>fields.map(([k])=>`"${String(r[k]??"").replace(/"/g,'""')}"`).join(","))].join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download=`ekima-${type}.csv`;a.click()};
+  window.showQR3=function(type,id){const r=(data[type]||[]).find(x=>x.id===id);if(!r)return;const payload=encodeURIComponent(JSON.stringify({type,id,code:r.code||r.billNo||r.employeeId||r.name||""}));const w=window.open("","_blank");if(w){w.document.write(`<title>EKIMA QR</title><h2>EKIMA ${schemas[type]?.title||type}</h2><img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${payload}" alt="QR Code"><pre>${JSON.stringify(r,null,2)}</pre>`);w.document.close()}};
+  function health3(){
+    const sales=(data.sales||[]).reduce((a,r)=>a+(+r.amount||0),0),purchases=(data.purchases||[]).reduce((a,r)=>a+(+r.qty||0)*(+r.rate||0)-(+r.discount||0),0),cogs=(data.sales||[]).reduce((a,r)=>a+(+r.cogs||0),0),expenses=(data.expenses||[]).reduce((a,r)=>a+(+r.amount||0),0),receivable=(data.outstanding||[]).reduce((a,r)=>a+Math.max(0,(+r.total||0)-(+r.paid||0)),0),stock=(data.items||[]).reduce((a,r)=>a+(+r.stock||+r.opening||0)*(+r.purchaseRate||+r.rate||0),0),slow=(data.items||[]).filter(r=>(+r.stock||+r.opening||0)>0).length,dead=(data.items||[]).filter(r=>(+r.stock||+r.opening||0)>0&&!r.stockDate).length;
+    const rows=[["Sales Health",sales>0?"Healthy":"Warning"],["Purchase Health",purchases>0?"Healthy":"Warning"],["Gross Profit",money(sales-cogs)],["Net Profit",money(sales-cogs-expenses)],["Receivable",money(receivable)],["Payable",money(purchases)],["Inventory Value",money(stock)],["Slow Moving Stock",slow],["Dead Stock",dead],["Expense Ratio",sales?Math.round(expenses/sales*100)+"%":"0%"]];
+    return `<div class="wrap"><div class="head"><div><h1>Business Health Check-Up</h1><div class="page-note">Calculated from live sales, purchases, expenses, receivables and inventory.</div></div>${action3("transactions")}</div><div class="health-grid">${rows.map(r=>`<div class="health-card"><span>${r[0]}</span><b>${esc3(r[1])}</b><i class="${String(r[1]).toLowerCase()==="critical"?"critical":String(r[1]).toLowerCase()==="warning"?"warning":"healthy"}">${typeof r[1]==="string"&&["Healthy","Warning","Critical"].includes(r[1])?r[1]:"Live"}</i></div>`).join("")}</div><div class="panel"><h3>Recommendations</h3><p>${receivable>sales*.3?"Prioritize receivable collection and customer follow-up. ":""}${dead>0?"Review undated/dead stock and consider a clearance plan. ":""}${sales>0&&expenses/sales>.3?"Review operating expenses against sales growth. ":""}${!receivable&&!dead?"Business data currently shows no critical recommendation.":"Use the follow-up and stock pages to take action."}</p></div></div>`;
+  }
+  function cashflow3(){
+    const cashIn=(data.sales||[]).reduce((a,r)=>a+(+r.collection||0),0)+(data.payments||[]).reduce((a,r)=>a+(+r.amount||0),0),cashOut=(data.purchases||[]).reduce((a,r)=>a+(+r.qty||0)*(+r.rate||0),0)+(data.expenses||[]).reduce((a,r)=>a+(+r.amount||0),0),bankIn=(data.transactions||[]).filter(r=>/bank|qr/i.test(r.payment||"")&&(+r.debit||0)>0).reduce((a,r)=>a+(+r.debit||0),0),bankOut=(data.transactions||[]).filter(r=>/bank|qr/i.test(r.payment||"")&&(+r.credit||0)>0).reduce((a,r)=>a+(+r.credit||0),0),close=+data.settings.openingCash+cashIn-cashOut;
+    return `<div class="wrap"><div class="head"><div><h1>Cash Flow Management</h1><div class="page-note">Opening + inflow − outflow = closing cash.</div></div>${action3("transactions")}</div><div class="cards">${[["Opening Cash",data.settings.openingCash],["Cash In",cashIn],["Cash Out",cashOut],["Bank In",bankIn],["Bank Out",bankOut],["Closing Cash",close],["Customer Collection",(data.sales||[]).reduce((a,r)=>a+(+r.collection||0),0)],["Operating Expenses",(data.expenses||[]).reduce((a,r)=>a+(+r.amount||0),0)]].map(x=>`<div class="card"><label>${x[0]}</label><strong>${money(x[1])}</strong></div>`).join("")}</div><div class="panel"><h3>Cash Flow Status</h3><p class="${close<0?"alert red":"alert green"}">${close<0?"Critical: projected closing cash is negative.":"Healthy: projected closing cash is positive."}</p></div></div>`;
+  }
+  function attendance3(){
+    const todayRows=(data.attendance||[]).filter(r=>r.attendanceDate===today()),counts={Present:0,Absent:0,Leave:0,Late:0};todayRows.forEach(r=>{counts[r.status]=(counts[r.status]||0)+1;if(String(r.late).toLowerCase()==="yes")counts.Late++});
+    return `<div class="wrap"><div class="head"><div><h1>Staff Attendance</h1><div class="page-note">Employee attendance with check-in, check-out, late and overtime tracking.</div></div>${action3("attendance")}</div><div class="cards">${Object.entries(counts).map(x=>`<div class="card"><label>Today ${x[0]}</label><strong>${x[1]}</strong></div>`).join("")}</div><div class="panel">${can3("edit")?form3("attendance"):"<p class='muted'>View and export access only.</p>"}<div id="tbl">${table3("attendance")}</div></div></div>`;
+  }
+  function daybook3(){
+    const rows=[...(data.transactions||[]).map(r=>({date:r.date,voucherNo:r.ref,voucherType:r.type,account:r.payment,particulars:r.party,debit:r.debit,credit:r.credit,balance:(+r.debit||0)-(+r.credit||0),user:current?.name||"System"})),...(data.journals||[]).map(r=>({date:r.date,voucherNo:r.ref,voucherType:"Journal",account:r.account,particulars:r.narration,debit:r.debit,credit:r.credit,balance:(+r.debit||0)-(+r.credit||0),user:current?.name||"System"}))].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    return `<div class="wrap"><div class="head"><div><h1>Day Book</h1><div class="page-note">Chronological view of sales, purchases, payments and journal postings.</div></div>${action3("daybook")}</div><div class="panel"><div class="toolbar"><input class="search" placeholder="Search voucher, account or party…" oninput="filterTable(this.value)"><input type="date" onchange="filterDate3(this.value)"></div><div id="tbl">${tableRows3(rows,schemas.daybook.fields)}</div></div></div>`;
+  }
+  function tableRows3(rows,fields){return `<div class="tablewrap"><table><thead><tr>${fields.map(x=>`<th>${x[1]}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${fields.map(([k])=>`<td>${esc3(r[k]??"")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`}
+  function filterDate3(d){document.querySelectorAll("#tbl tbody tr").forEach(r=>r.style.display=!d||r.cells[0]?.innerText===d?"":"none")}
+  function table3(type){return tableRows3(data[type]||[],schemas[type].fields)}
+  function form3(type){const s=schemas[type];return `<div class="formgrid" id="form" data-edit-id="">${s.fields.map(([k,l,t])=>`<input id="f_${k}" type="${t}" placeholder="${l}" value="">`).join("")}</div><div class="form-actions"><button class="btn" onclick="submitForm('${type}')">Save Record</button></div>`}
+  function esc3(v){return String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+  function action3(type){return `<div class="export-actions">${can3("export")?`<button class="btn mini" onclick="exportModule('${type}')">Export Excel</button><button class="btn mini" onclick="exportCsv3('${type}')">Export CSV</button><button class="btn mini" onclick="exportDocument('${type}','pdf')">Export PDF</button><button class="btn mini" onclick="exportDocument('${type}','word')">Export Word</button>`:""}${can3("print")?`<button class="btn mini outline" onclick="exportDocument('${type}','print')">Print</button>`:""}</div>`}
+  const oldSubmit3=window.submitForm;
+  window.submitForm=function(type){
+    if(!can3("edit"))return alert("Permission denied.");
+    syncGrid();
+    const numberFields={sales:"billNo",purchases:"bill",payments:"ref",returns:"ref",quotation:"quoteNo",po:"pono"};
+    const nf=numberFields[type],input=nf&&document.getElementById("f_"+nf),form=document.getElementById("form"),editId=Number(form?.dataset.editId||0),old=editId?(data[type]||[]).find(r=>r.id===editId):null;
+    if(input&&!input.value){input.value=nextNo(type)}
+    if(input&&old&&!isAdmin3()&&input.value!==String(old[nf]||""))input.value=old[nf]||input.value;
+    const before=old?Object.assign({},old):null;oldSubmit3(type);
+    const after=editId?(data[type]||[]).find(r=>r.id===editId):(data[type]||[]).slice(-1)[0];
+    if(after){audit3(editId?"Edit":"Add",type,before,after);accounting3(type,after);save()}
+    entryRows=[{item:"",qty:1,rate:0,discount:0,vat:0}];
+  };
+  const oldDel3=window.del;
+  window.del=function(type,id){const old=(data[type]||[]).find(r=>r.id===id);oldDel3(type,id);if(old&&!(data[type]||[]).some(r=>r.id===id)){audit3("Delete",type,old,null);save()}};
+  const oldRender3=window.render;
+  window.render=function(){
+    if(page==="health"){document.getElementById("title").textContent="Business Health";document.getElementById("content").innerHTML=health3();return}
+    if(page==="cashflow"){document.getElementById("title").textContent="Cash Flow";document.getElementById("content").innerHTML=cashflow3();return}
+    if(page==="attendance"){document.getElementById("title").textContent="Attendance";document.getElementById("content").innerHTML=attendance3();return}
+    if(page==="daybook"){document.getElementById("title").textContent="Day Book";document.getElementById("content").innerHTML=daybook3();return}
+    if(page==="finance"){document.getElementById("title").textContent="Finance Management";document.getElementById("content").innerHTML=cashflow3();return}
+    if(page==="auditTrail"){document.getElementById("title").textContent="Audit Trail";document.getElementById("content").innerHTML=`<div class="wrap"><div class="head"><h1>Audit Trail</h1>${action3("auditTrail")}</div><div class="panel">${tableRows3(data.auditTrail,[["date","Date"],["time","Time"],["user","User"],["action","Action"],["type","Module"],["oldValue","Old Value"],["newValue","New Value"]])}</div></div>`;return}
+    const result=oldRender3();if((page==="sales"||page==="purchases")&&document.getElementById("form")){const panel=document.getElementById("form").closest(".panel");if(panel&&!document.getElementById("entry-grid")){const div=document.createElement("div");div.id="entry-grid";panel.appendChild(div);renderEntryGrid()}}
+  };
+})();
+
 /* Operations, sales bill and quotation improvements */
 (function(){
   const addFields=(type,fields)=>{
