@@ -344,6 +344,57 @@ function settingsPageEnhanced(){return `<div class="wrap"><div class="head"><div
 window.saveCompanySettings=function(){["companyName","address","phone","email","vat"].forEach(k=>data.settings[k]=document.getElementById("set-"+(k==="companyName"?"company":k))?.value||"");save();notify("Company details saved");render()};
 })();
 
+/* QR entry center and editable document format controls */
+(function(){
+  modules.qrentry=["▣","QR Entry Center"];
+  data.settings.formats=data.settings.formats||{
+    invoiceTitle:"SALES INVOICE",purchaseTitle:"PURCHASE INVOICE",quotationTitle:"QUOTATION",
+    footer:"Thank you for your business.",signatureLeft:"Prepared By",signatureRight:"Approved By"
+  };
+  function esc4(v){return String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+  function can4(a){return current?.role==="Admin"||current?.role==="Super Admin"||data.permissions?.[current?.role]?.[a]!==false}
+  function note4(t){const n=document.createElement("div");n.className="toast";n.textContent=t;document.body.appendChild(n);setTimeout(()=>n.remove(),2500)}
+  function audit4(action,type,oldValue,newValue){data.auditTrail=data.auditTrail||[];data.auditTrail.push({id:Date.now()+Math.floor(Math.random()*999),user:current?.name||"System",date:today(),time:new Date().toLocaleTimeString(),action,type,oldValue:oldValue?JSON.stringify(oldValue):"",newValue:newValue?JSON.stringify(newValue):""})}
+  function qrCenter(){
+    return `<div class="wrap"><div class="head"><div><h1>QR Entry Center</h1><div class="page-note">Scan or type an Item Code, Customer Code, Employee ID, Bill No. or saved record ID.</div></div></div><div class="panel qr-entry-panel"><div class="qr-scan-row"><input id="qr-lookup" autofocus placeholder="Scan QR value or type code…" onkeydown="if(event.key==='Enter')lookupQR()"><button class="btn" onclick="lookupQR()">Find Record</button><button class="btn outline" onclick="startQRInput()">Use Scanner Input</button></div><div id="qr-result" class="qr-result"><span class="muted">The matching item, customer, supplier, employee or bill will appear here.</span></div></div><div class="panel"><h3>Generate QR</h3><div class="qr-generate-grid"><select id="qr-type">${["items","customers","suppliers","attendance","sales","purchases","quotations"].map(t=>`<option value="${t}">${schemas[t]?.title||t}</option>`).join("")}</select><select id="qr-record">${qrRecords("items")}</select><button class="btn" onclick="generateSelectedQR()">Generate QR</button></div><div id="qr-image"></div></div></div>`;
+  }
+  function qrRecords(type){return (data[type]||[]).map(r=>`<option value="${r.id}">${esc4(r.code||r.employeeId||r.billNo||r.quoteNo||r.name||r.person||r.supplier||r.id)}</option>`).join("")}
+  window.startQRInput=function(){document.getElementById("qr-lookup")?.focus();note4("Scanner input is ready. Scan into the focused field.")};
+  window.lookupQR=function(){
+    const value=String(document.getElementById("qr-lookup")?.value||"").trim();if(!value)return;
+    let match=null,type="";
+    Object.keys(schemas).some(t=>(data[t]||[]).some(r=>{const vals=[r.id,r.code,r.employeeId,r.billNo,r.quoteNo,r.ref,r.name,r.customer,r.person,r.supplier].map(String);if(vals.includes(value)){match=r;type=t;return true}return false}));
+    const box=document.getElementById("qr-result");if(!match){box.innerHTML="<div class='alert red'>No saved record matched that QR value.</div>";return}
+    const phone=match.mobile||match.mobil||match.phone||"";box.innerHTML=`<div class="qr-found"><div><b>${esc4(match.name||match.customer||match.person||match.supplier||match.item||match.billNo||"Record")}</b><span>Module: ${esc4(schemas[type]?.title||type)}</span><span>Code: ${esc4(match.code||match.employeeId||match.billNo||match.quoteNo||match.id)}</span><span>${esc4(phone)}</span></div><div class="form-actions"><button class="btn" onclick="go('${type}')">Open Module</button>${type==="attendance"?`<button class="btn success" onclick="quickAttendance('${match.employeeId||match.id}')">Record Check-In / Out</button>`:""}${type==="items"?`<button class="btn outline" onclick="addScannedItem('${match.name||match.code}')">Add to Entry</button>`:""}</div></div>`;
+  };
+  window.generateSelectedQR=function(){
+    const type=document.getElementById("qr-type")?.value,id=Number(document.getElementById("qr-record")?.value),r=(data[type]||[]).find(x=>x.id===id);if(!r)return;
+    const value=encodeURIComponent(JSON.stringify({type,id,code:r.code||r.employeeId||r.billNo||r.quoteNo||r.name||""}));document.getElementById("qr-image").innerHTML=`<div class="qr-card"><img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${value}" alt="Generated QR"><p>${esc4(r.name||r.code||r.billNo||r.quoteNo||id)}</p></div>`;
+  };
+  window.quickAttendance=function(employeeId){
+    const existing=(data.attendance||[]).find(r=>String(r.employeeId)===String(employeeId)&&r.attendanceDate===today()),employee=(data.hr||[]).find(r=>String(r.code)===String(employeeId)||String(r.id)===String(employeeId))||{};
+    if(existing){existing.checkOut=new Date().toTimeString().slice(0,5);existing.status=existing.status||"Present"}else{data.attendance.push({id:Date.now(),employeeId,name:employee.name||employeeId,department:employee.department||"",attendanceDate:today(),checkIn:new Date().toTimeString().slice(0,5),status:"Present"});}
+    save();audit4("QR Attendance","attendance",null,existing||data.attendance.slice(-1)[0]);note4("Attendance time recorded");render();
+  };
+  window.addScannedItem=function(name){if(window.entryRows){entryRows[0].item=name;renderEntryGrid();note4("Item added to the transaction row.")}};
+  function formatEditor(){
+    const f=data.settings.formats,n=data.settings.numbering;
+    return `<div class="panel"><div class="settings-grid"><label>Invoice title<input id="fmt-invoice" value="${esc4(f.invoiceTitle)}"></label><label>Purchase title<input id="fmt-purchase" value="${esc4(f.purchaseTitle)}"></label><label>Quotation title<input id="fmt-quotation" value="${esc4(f.quotationTitle)}"></label><label>Invoice prefix<input id="fmt-inv-prefix" value="${esc4(n.invoicePrefix)}"></label><label>Purchase prefix<input id="fmt-pur-prefix" value="${esc4(n.purchasePrefix)}"></label><label>Payment prefix<input id="fmt-pay-prefix" value="${esc4(n.paymentPrefix)}"></label><label>Footer text<input id="fmt-footer" value="${esc4(f.footer)}"></label><label>Left signature label<input id="fmt-left" value="${esc4(f.signatureLeft)}"></label><label>Right signature label<input id="fmt-right" value="${esc4(f.signatureRight)}"></label></div><button class="btn" onclick="saveFormatSettings()">Save Format Settings</button></div>`;
+  }
+  window.saveFormatSettings=function(){
+    if(!can4("edit"))return alert("Permission denied.");
+    const f=data.settings.formats,n=data.settings.numbering;f.invoiceTitle=document.getElementById("fmt-invoice").value;f.purchaseTitle=document.getElementById("fmt-purchase").value;f.quotationTitle=document.getElementById("fmt-quotation").value;f.footer=document.getElementById("fmt-footer").value;f.signatureLeft=document.getElementById("fmt-left").value;f.signatureRight=document.getElementById("fmt-right").value;n.invoicePrefix=document.getElementById("fmt-inv-prefix").value||"INV";n.purchasePrefix=document.getElementById("fmt-pur-prefix").value||"PUR";n.paymentPrefix=document.getElementById("fmt-pay-prefix").value||"PAY";save();note4("Document format settings saved");render();
+  };
+  const previousRender=window.render;
+  window.render=function(){
+    if(page==="qrentry"){document.getElementById("title").textContent="QR Entry Center";document.getElementById("content").innerHTML=qrCenter();return}
+    const result=previousRender();
+    if(page==="settings"){const wrap=document.querySelector("#content .wrap");if(wrap&&!document.getElementById("format-editor")){const panel=document.createElement("div");panel.id="format-editor";panel.innerHTML="<h3>Editable Document Formats & Auto Numbering</h3>"+formatEditor();wrap.appendChild(panel)}}
+    const typeSelect=document.getElementById("qr-type");if(typeSelect&&!typeSelect.dataset.bound){typeSelect.dataset.bound="1";typeSelect.onchange=()=>{const rec=document.getElementById("qr-record");rec.innerHTML=qrRecords(typeSelect.value)}}
+    return result;
+  };
+})();
+
 /* ERP specification pass: numbering, health, finance, attendance and audit */
 (function(){
   const add=(type,fields)=>{if(!schemas[type])schemas[type]={title:type,fields:[]};fields.forEach(f=>{if(!schemas[type].fields.some(x=>x[0]===f[0]))schemas[type].fields.push(f)})};
