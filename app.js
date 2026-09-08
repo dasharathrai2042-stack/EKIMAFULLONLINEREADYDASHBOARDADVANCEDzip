@@ -288,6 +288,25 @@ function go(p) {
 function money(n) {
   return "Rs. " + Number(n || 0).toLocaleString("en-IN");
 }
+function amountInWords(value) {
+  const ones = ["Zero","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"];
+  const tens = ["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
+  const underThousand = (n) => {
+    if (n < 20) return ones[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");
+    return ones[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " + underThousand(n % 100) : "");
+  };
+  const grouped = (n) => {
+    if (n < 1000) return underThousand(n);
+    if (n < 100000) return underThousand(Math.floor(n / 1000)) + " Thousand" + (n % 1000 ? " " + underThousand(n % 1000) : "");
+    if (n < 10000000) return underThousand(Math.floor(n / 100000)) + " Lakh" + (n % 100000 ? " " + grouped(n % 100000) : "");
+    return grouped(Math.floor(n / 10000000)) + " Crore" + (n % 10000000 ? " " + grouped(n % 10000000) : "");
+  };
+  const amount = Math.max(0, Number(value) || 0);
+  const whole = Math.floor(amount);
+  const paisa = Math.round((amount - whole) * 100);
+  return `Rupees ${grouped(whole)}${paisa ? ` and ${underThousand(paisa)} Paisa` : ""} Only`;
+}
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -1364,13 +1383,17 @@ setInterval(
             `<tr>${s.fields.map(([k]) => `<td>${esc(r[k] ?? "")}</td>`).join("")}</tr>`,
         )
         .join("");
-    let total = rows.reduce(
-        (a, r) =>
-          a + (+r.amount || +r.total || (+r.qty || 0) * (+r.rate || 0) || 0),
+    const subtotal = rows.reduce(
+        (a, r) => a + (+r.amount || +r.total || (+r.qty || 0) * (+r.rate || 0) || 0),
         0,
       ),
-      vat = rows.reduce((a, r) => a + (+r.vat || 0), 0);
-    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(s.title)} - EKIMA</title><style>body{font-family:Arial;color:#172033;margin:36px}header{border-bottom:3px solid #1976d2;padding-bottom:14px;margin-bottom:24px}h1{margin:0;color:#102a43}h2{margin:12px 0 4px}small{color:#64748b}table{width:100%;border-collapse:collapse;font-size:10px}th,td{border:1px solid #dce5ef;padding:7px;text-align:left}th{background:#eaf2fb}.totals{margin:18px 0 0 auto;width:280px}.totals div{display:flex;justify-content:space-between;padding:5px;border-bottom:1px solid #e2e8f0}.sign{display:flex;justify-content:space-between;margin-top:80px}.sign span{width:180px;border-top:1px solid #172033;padding-top:8px;text-align:center}</style></head><body><header><h1>${esc(data.settings.companyName || "EKIMA ENTERPRISES")}</h1><small>${esc(data.settings.address || "")} · ${esc(data.settings.phone || "")} ${data.settings.vat ? "· VAT: " + esc(data.settings.vat) : ""}</small><h2>${esc(s.title)} Report</h2><small>Date: ${today()} · Prepared by: ${esc(current?.name || "Administrator")}</small></header><table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${body || `<tr><td colspan="${Math.max(headers.length, 1)}">No records</td></tr>`}</tbody></table><div class="totals"><div><b>Subtotal</b><b>${money(total)}</b></div><div><span>VAT</span><span>${money(vat)}</span></div><div><b>Total</b><b>${money(total + vat)}</b></div></div><div class="sign"><span>Prepared By</span><span>Approved By</span></div></body></html>`;
+      discount = rows.reduce((a, r) => a + (+r.discount || 0), 0),
+      vat = rows.reduce((a, r) => {
+        const taxable = Math.max(0, (+r.amount || (+r.qty || 0) * (+r.rate || 0) || 0) - (+r.discount || 0));
+        return a + (taxable * (+r.vat || 0)) / 100;
+      }, 0),
+      grandTotal = subtotal - discount + vat;
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(s.title)} - EKIMA</title><style>body{font-family:Arial;color:#172033;margin:36px}header{border-bottom:3px solid #1976d2;padding-bottom:14px;margin-bottom:24px}h1{margin:0;color:#102a43}h2{margin:12px 0 4px}small{color:#64748b}table{width:100%;border-collapse:collapse;font-size:10px}th,td{border:1px solid #dce5ef;padding:7px;text-align:left}th{background:#eaf2fb}.totals{margin:18px 0 0 auto;width:280px}.totals div{display:flex;justify-content:space-between;padding:5px;border-bottom:1px solid #e2e8f0}.amount-words{margin-top:16px;padding:10px;border:1px solid #dce5ef;background:#f6f9fc}.sign{display:flex;justify-content:space-between;margin-top:80px}.sign span{width:180px;border-top:1px solid #172033;padding-top:8px;text-align:center}</style></head><body><header><h1>${esc(data.settings.companyName || "EKIMA ENTERPRISES")}</h1><small>${esc(data.settings.address || "")} · ${esc(data.settings.phone || "")} ${data.settings.vat ? "· VAT: " + esc(data.settings.vat) : ""}</small><h2>${esc(s.title)} Report</h2><small>Date: ${today()} · Prepared by: ${esc(current?.name || "Administrator")}</small></header><table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${body || `<tr><td colspan="${Math.max(headers.length, 1)}">No records</td></tr>`}</tbody></table><div class="totals"><div><b>Subtotal</b><b>${money(subtotal)}</b></div><div><span>Discount</span><span>${money(discount)}</span></div><div><span>VAT</span><span>${money(vat)}</span></div><div><b>Grand Total</b><b>${money(grandTotal)}</b></div></div><div class="amount-words"><b>Amount in Words:</b> ${esc(amountInWords(grandTotal))}</div><div class="sign"><span>Prepared By</span><span>Approved By</span></div></body></html>`;
   }
   function exportDocument(type, kind) {
     if (kind === "print" && !guard("print", "print reports")) return;
@@ -2224,7 +2247,7 @@ setInterval(
         0,
       );
     const grandTotal = subtotal - discount + vat;
-    box.innerHTML = `<div class="entry-grid-head"><b>Spreadsheet Entry Rows</b><span class="muted">Excel-style totals update as you type</span></div><div class="tablewrap"><table class="line-grid"><thead><tr><th>S.N.</th><th>Part Name</th><th>Item / Model</th><th>Qty</th><th>Rate</th><th>Discount</th><th>VAT %</th><th>Amount</th><th>Actions</th></tr></thead><tbody>${entryRows.map((r, i) => {const lineSubtotal=(+r.qty||0)*(+r.rate||0),lineVat=(lineSubtotal-(+r.discount||0))*(+r.vat||0)/100;return `<tr><td>${i + 1}</td><td><input value="${String(r.partName || "").replace(/"/g, "&quot;")}" oninput="updateEntryRow(${i},'partName',this.value)" placeholder="Part name"></td><td><input value="${String(r.item || "").replace(/"/g, "&quot;")}" oninput="updateEntryRow(${i},'item',this.value)" placeholder="Item / model"></td><td><input type="number" value="${r.qty || 0}" oninput="updateEntryRow(${i},'qty',this.value)"></td><td><input type="number" value="${r.rate || 0}" oninput="updateEntryRow(${i},'rate',this.value)"></td><td><input type="number" value="${r.discount || 0}" oninput="updateEntryRow(${i},'discount',this.value)"></td><td><input type="number" value="${r.vat || 0}" oninput="updateEntryRow(${i},'vat',this.value)"></td><td>${money(lineSubtotal-(+r.discount||0)+lineVat)}</td><td><button class="btn mini" onclick="duplicateEntryRow(${i})">Duplicate</button> <button class="btn mini danger" onclick="deleteEntryRow(${i})">Delete</button></td></tr>`}).join("")}</tbody><tfoot><tr><td colspan="5"><b>Excel Summary</b></td><td><b>${money(discount)}</b></td><td><b>${money(vat)}</b></td><td><b>${money(grandTotal)}</b></td><td></td></tr></tfoot></table></div><div class="entry-totals"><div><span>Subtotal</span><b>${money(subtotal)}</b></div><div><span>Discount</span><b>${money(discount)}</b></div><div><span>VAT</span><b>${money(vat)}</b></div><div class="grand-total"><span>Grand Total</span><b>${money(grandTotal)}</b></div></div><button class="btn mini outline" onclick="addEntryRow()">Add Row</button></div>`;
+    box.innerHTML = `<div class="entry-grid-head"><b>Spreadsheet Entry Rows</b><span class="muted">Excel-style totals update as you type</span></div><div class="tablewrap"><table class="line-grid"><thead><tr><th>S.N.</th><th>Item / Model</th><th>Part Name</th><th>Qty</th><th>Rate</th><th>Discount</th><th>VAT %</th><th>Amount</th><th>Actions</th></tr></thead><tbody>${entryRows.map((r, i) => {const lineSubtotal=(+r.qty||0)*(+r.rate||0),lineVat=(lineSubtotal-(+r.discount||0))*(+r.vat||0)/100;return `<tr><td>${i + 1}</td><td><input value="${String(r.item || "").replace(/"/g, "&quot;")}" oninput="updateEntryRow(${i},'item',this.value)" placeholder="Item / model"></td><td><input value="${String(r.partName || "").replace(/"/g, "&quot;")}" oninput="updateEntryRow(${i},'partName',this.value)" placeholder="Part name"></td><td><input type="number" value="${r.qty || 0}" oninput="updateEntryRow(${i},'qty',this.value)"></td><td><input type="number" value="${r.rate || 0}" oninput="updateEntryRow(${i},'rate',this.value)"></td><td><input type="number" value="${r.discount || 0}" oninput="updateEntryRow(${i},'discount',this.value)"></td><td><input type="number" value="${r.vat || 0}" oninput="updateEntryRow(${i},'vat',this.value)"></td><td>${money(lineSubtotal-(+r.discount||0)+lineVat)}</td><td><button class="btn mini" onclick="duplicateEntryRow(${i})">Duplicate</button> <button class="btn mini danger" onclick="deleteEntryRow(${i})">Delete</button></td></tr>`}).join("")}</tbody><tfoot><tr><td colspan="5"><b>Excel Summary</b></td><td><b>${money(discount)}</b></td><td><b>${money(vat)}</b></td><td><b>${money(grandTotal)}</b></td><td></td></tr></tfoot></table></div><div class="entry-totals"><div><span>Subtotal</span><b>${money(subtotal)}</b></div><div><span>Discount</span><b>${money(discount)}</b></div><div><span>VAT</span><b>${money(vat)}</b></div><div class="grand-total"><span>Grand Total</span><b>${money(grandTotal)}</b></div></div><button class="btn mini outline" onclick="addEntryRow()">Add Row</button></div>`;
   };
   window.exportCsv3 = function (type) {
     if (!can3("export")) return alert("Permission denied.");
@@ -2902,7 +2925,8 @@ setInterval(
     };
     const w = window.open("", "_blank");
     if (w) {
-      w.document.write(quoteHtml(q).replace("QUOTATION", "SALES BILL"));
+      const billHtml = quoteHtml(q).replace("QUOTATION", "SALES BILL").replace("</div><p><b>Terms:", `<div class="amount-words" style="margin-top:16px;padding:10px;border:1px solid #dce5ef;background:#f6f9fc"><b>Amount in Words:</b> ${esc2(amountInWords((+q.qty || 0) * (+q.rate || 0) - (+q.discount || 0) + (((+q.qty || 0) * (+q.rate || 0) - (+q.discount || 0)) * (+q.vat || 0)) / 100))}</div><p><b>Terms:`);
+      w.document.write(billHtml);
       w.document.close();
       w.print();
     }
